@@ -32,32 +32,35 @@ public class Piece {
     private String name;
 
     @Indexed("description_s")
+    @Column(name = "description", columnDefinition = "CLOB")
     private String description;
 
     @Field("categories_ss")
     @Lob
     @ElementCollection
-    @CollectionTable(name = "pieces_categories", joinColumns = @JoinColumn(name = "lst_cat_fk"))
-    @Column(name = "sub_categories")
+    @CollectionTable(name = "categories", joinColumns = @JoinColumn(name = "cat_fk"))
+    @Column(name = "v", columnDefinition = "CLOB")
     private List<String> categories;
 
     // <field name="mapentry[0].key">mapentry[0].value</field>
     // <field name="mapentry[1].key">mapentry[1].value</field>
     @Field("field_*")
+    @Lob
     @ElementCollection
-    @MapKeyColumn(name = "field_key")
-    @Column(name = "field_val")
-    @CollectionTable(name = "pieces_fields", joinColumns = @JoinColumn(name = "map_fld_fk"))
+    @MapKeyColumn(name = "k")
+    @Column(name = "v", columnDefinition = "CLOB")
+    @CollectionTable(name = "fields", joinColumns = @JoinColumn(name = "fld_fk"))
     private Map<String, String> fields;
 
     // <field name="'text_' + mapentry[0].key">mapentry[0].value</field>
     // <field name="'text_' + mapentry[1].key">mapentry[1].value</field>
     @Dynamic
     @Field("text_*")
+    @Lob
     @ElementCollection
-    @MapKeyColumn(name = "text_key")
-    @Column(name = "text_val")
-    @CollectionTable(name = "pieces_texts", joinColumns = @JoinColumn(name = "map_txt_fk"))
+    @MapKeyColumn(name = "k")
+    @Column(name = "v", columnDefinition = "CLOB")
+    @CollectionTable(name = "texts", joinColumns = @JoinColumn(name = "txt_fk"))
     private Map<String, String> texts;
 
     public String getId() {
