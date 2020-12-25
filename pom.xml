@@ -10,7 +10,7 @@
     </parent>
     <groupId>org.appxi</groupId>
     <artifactId>api-pieces</artifactId>
-    <version>1.0.0</version>
+    <version>20.12.25.2</version>
     <name>Api Pieces</name>
     <description>Pieces api project for most useful data quick search.</description>
 
@@ -41,6 +41,7 @@
     </dependencies>
 
     <build>
+        <finalName>api-pieces</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
