@@ -1,6 +1,8 @@
 package org.appxi.api.pieces.controller;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.appxi.api.pieces.model.Piece;
 import org.appxi.api.pieces.repo.solr.PieceSolrRepository;
 import org.appxi.api.pieces.repo.solr.PieceSolrRepositoryEx;
@@ -19,6 +21,7 @@ import java.util.regex.Pattern;
 @RestController
 @RequestMapping("/api")
 class SearchController {
+    private static final Log logger = LogFactory.getLog(SearchController.class);
     private static final Pattern IGNORED_CHARS_PATTERN = Pattern.compile("\\p{Punct}");
     private final PieceSolrRepository solrRepository;
     private final PieceSolrRepositoryEx solrRepositoryEx;
@@ -31,8 +34,10 @@ class SearchController {
     @GetMapping("/detail/{id}")
     public Piece detail(@PathVariable("id") String id,
                         HttpServletResponse resp) throws IOException {
-        if (StringUtils.isBlank(id))
+        if (StringUtils.isBlank(id)) {
             resp.sendError(400);
+            return null;
+        }
         Piece result = solrRepository.findById(id).orElse(null);
         if (null == result)
             resp.sendError(404);
@@ -43,7 +48,14 @@ class SearchController {
     public Page<Piece> search(@PathVariable("project") String project,
                               @RequestParam(value = "q") String query,
                               @RequestParam(value = "t", required = false) String type,
-                              @PageableDefault(page = 0, size = 3) Pageable pageable) {
+                              @PageableDefault(page = 0, size = 3) Pageable pageable,
+                              HttpServletResponse resp) throws IOException {
+        if (StringUtils.isBlank(query)) {
+            resp.sendError(400, "q is empty");
+            return null;
+        }
+        logger.info("search: " + project + "/" + query);
+
         Collection<String> names = prepareSearchTerms(query);
         Collection<String> types = prepareSearchTypes(type);
         if (null == types)
