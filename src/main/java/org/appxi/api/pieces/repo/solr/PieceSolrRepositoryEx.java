@@ -1,15 +1,17 @@
 package org.appxi.api.pieces.repo.solr;
 
 import org.appxi.api.pieces.model.Piece;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.solr.core.SolrTemplate;
 import org.springframework.data.solr.core.query.Criteria;
 import org.springframework.data.solr.core.query.SimpleQuery;
 import org.springframework.stereotype.Repository;
 
 import javax.annotation.Resource;
-import java.util.List;
 
 @Repository
 public class PieceSolrRepositoryEx {
@@ -17,33 +19,54 @@ public class PieceSolrRepositoryEx {
     @Resource
     private SolrTemplate solrTemplate;
 
-    public List<Piece> dynamicSearch(String searchTerm) {
-        Criteria conditions = createConditions(searchTerm);
-        SimpleQuery search = new SimpleQuery(conditions);
+    public Page<Piece> searchByJson(String project, String jsonTxt) {
+        final JSONObject jsonObj = new JSONObject(jsonTxt);
+        Criteria conditions = new Criteria("project_s").is(project);
 
-        search.addSort(sortByIdDesc());
+        if (jsonObj.has("query")) {
+            conditions = conditions.and("name_s").is(jsonObj.getString("query"));
+        } else if (jsonObj.has("match")) {
+            Object matchObj = jsonObj.get("match");
+            if (matchObj instanceof JSONObject map) {
+                for (String key : map.keySet()) {
+                    conditions = buildConditions(conditions, map, key, true);
+                }
+            } else if (matchObj instanceof JSONArray lst) {
+                for (Object obj : lst) {
+                    if (obj instanceof JSONObject map) {
+                        for (String key : map.keySet()) {
+                            conditions = buildConditions(conditions, map, key, false);
+                        }
+                    }
+                }
+            }
+        } else {
+            return null;
+        }
 
-        Page<Piece> results = solrTemplate.queryForPage("Order", search, Piece.class);
-        return results.getContent();
+        final SimpleQuery query = new SimpleQuery(conditions);
+        final Pageable pageable = PageRequest.of(jsonObj.optInt("page", 0), jsonObj.optInt("size", 5));
+        query.setPageRequest(pageable);
+        return solrTemplate.queryForPage("pieces", query, Piece.class);
     }
 
-    private Criteria createConditions(String searchTerm) {
-        Criteria conditions = null;
+    private static Criteria buildConditions(Criteria conditions, JSONObject map, String key, boolean defaultOpIsAnd) {
+        if (key.startsWith("AND "))
+            conditions = conditions.and(key.substring(4));
+        else if (key.startsWith("OR "))
+            conditions = conditions.or(key.substring(3));
+        else conditions = defaultOpIsAnd ? conditions.and(key) : conditions.or(key);
 
-        for (String term : searchTerm.split(" ")) {
-            if (conditions == null) {
-                conditions = new Criteria("oid").contains(term)
-                        .or(new Criteria("odesc").contains(term));
-            } else {
-                conditions = conditions.or(new Criteria("oid").contains(term))
-                        .or(new Criteria("odesc").contains(term));
-            }
-        }
+        String val = map.getString(key);
+        if (val.startsWith("is "))
+            conditions = conditions.is(val.substring(3));
+        else if (val.startsWith("startsWith "))
+            conditions = conditions.startsWith(val.substring(11));
+        else if (val.startsWith("endsWith "))
+            conditions = conditions.endsWith(val.substring(9));
+        else if (val.startsWith("contains "))
+            conditions = conditions.contains(val.substring(9));
+        else conditions = conditions.is(val);
         return conditions;
     }
-
-    private Sort sortByIdDesc() {
-        return Sort.by(Sort.Direction.DESC, "oid");
-    }
-
 }

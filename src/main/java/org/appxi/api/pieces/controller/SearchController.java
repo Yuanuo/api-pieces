@@ -48,7 +48,7 @@ class SearchController {
     public Page<Piece> search(@PathVariable("project") String project,
                               @RequestParam(value = "q") String query,
                               @RequestParam(value = "t", required = false) String type,
-                              @PageableDefault(page = 0, size = 3) Pageable pageable,
+                              @PageableDefault(page = 0, size = 5) Pageable pageable,
                               HttpServletResponse resp) throws IOException {
         if (StringUtils.isBlank(query)) {
             resp.sendError(400, "q is empty");
@@ -56,11 +56,37 @@ class SearchController {
         }
         logger.info("search: " + project + "/" + query);
 
-        Collection<String> names = prepareSearchTerms(query);
-        Collection<String> types = prepareSearchTypes(type);
+        Collection<String> names = preparedSearchTerms(query);
+        Collection<String> types = preparedSearchTypes(type);
         if (null == types)
             return solrRepository.findByProjectAndNameIn(project, names, pageable);
         return solrRepository.findByProjectAndTypeInAndNameIn(project, types, names, pageable);
+    }
+
+    @PostMapping(value = "/search/{project}")
+    public Page<Piece> searchByJson(@PathVariable("project") String project,
+                                    @RequestBody String jsonTxt,
+                                    HttpServletResponse resp) throws IOException {
+        if (StringUtils.isBlank(jsonTxt)) {
+            resp.sendError(400, "body is empty");
+            return null;
+        }
+        if (jsonTxt.length() > 2048) {
+            resp.sendError(400, "body too large(>2k)");
+            return null;
+        }
+        Page<Piece> result = null;
+        try {
+            result = solrRepositoryEx.searchByJson(project, jsonTxt);
+        } catch (Exception e) {
+            resp.sendError(400, "body is not json?");
+            return null;
+        }
+        if (null == result) {
+            resp.sendError(400, "bad conditions");
+            return null;
+        }
+        return result;
     }
 
     @GetMapping(value = "/autocomplete/{project}", produces = "application/json")
@@ -71,8 +97,8 @@ class SearchController {
         if (StringUtils.isBlank(query)) {
             return Collections.emptySet();
         }
-        Collection<String> names = prepareSearchTerms(query);
-        Collection<String> types = prepareSearchTypes(type);
+        Collection<String> names = preparedSearchTerms(query);
+        Collection<String> types = preparedSearchTypes(type);
         FacetPage<Piece> facet;
         if (null == types)
             facet = solrRepository.findByProjectAndNameStartsWith(project, names, pageable);
@@ -89,17 +115,7 @@ class SearchController {
         return result;
     }
 
-//    @GetMapping("/piece/desc/{orderDesc}/{page}")
-//    public List<Piece> find(@PathVariable String orderDesc, @PathVariable int page) {
-//        return reposolr.findByDescription(orderDesc, PageRequest.of(page, 2)).getContent();
-//    }
-//
-//    @GetMapping("/piece/search/{searchTerm}/{page}")
-//    public List<Piece> findBySearchTerm(@PathVariable String searchTerm, @PathVariable int page) {
-//        return reposolr.findByCustomerQuery(searchTerm, PageRequest.of(page, 2)).getContent();
-//    }
-
-    private static Collection<String> prepareSearchTerms(String input) {
+    private static Collection<String> preparedSearchTerms(String input) {
         String[] array = StringUtils.split(input, " ");
         List<String> result = new ArrayList<>(array.length);
         for (String item : array) {
@@ -110,7 +126,7 @@ class SearchController {
         return result;
     }
 
-    private static Collection<String> prepareSearchTypes(String input) {
+    private static Collection<String> preparedSearchTypes(String input) {
         if (StringUtils.isBlank(input))
             return null;
         String[] array = StringUtils.split(input, ",");
@@ -122,4 +138,14 @@ class SearchController {
         }
         return result;
     }
+
+//    @GetMapping("/piece/desc/{orderDesc}/{page}")
+//    public List<Piece> find(@PathVariable String orderDesc, @PathVariable int page) {
+//        return reposolr.findByDescription(orderDesc, PageRequest.of(page, 2)).getContent();
+//    }
+//
+//    @GetMapping("/piece/search/{searchTerm}/{page}")
+//    public List<Piece> findBySearchTerm(@PathVariable String searchTerm, @PathVariable int page) {
+//        return reposolr.findByCustomerQuery(searchTerm, PageRequest.of(page, 2)).getContent();
+//    }
 }
