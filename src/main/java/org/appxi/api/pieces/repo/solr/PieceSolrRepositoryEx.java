@@ -1,7 +1,6 @@
 package org.appxi.api.pieces.repo.solr;
 
 import org.appxi.api.pieces.model.Piece;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -21,52 +20,85 @@ public class PieceSolrRepositoryEx {
 
     public Page<Piece> searchByJson(String project, String jsonTxt) {
         final JSONObject jsonObj = new JSONObject(jsonTxt);
-        Criteria conditions = new Criteria("project_s").is(project);
+        final Criteria mustProject = new Criteria("project_s").is(project);
 
+        Criteria conditions = null;
         if (jsonObj.has("query")) {
-            conditions = conditions.and("name_s").is(jsonObj.getString("query"));
+            conditions = new Criteria("name_s").is(valObjects(jsonObj.getString("query")));
         } else if (jsonObj.has("match")) {
-            Object matchObj = jsonObj.get("match");
-            if (matchObj instanceof JSONObject map) {
-                for (String key : map.keySet()) {
-                    conditions = buildConditions(conditions, map, key, true);
-                }
-            } else if (matchObj instanceof JSONArray lst) {
-                for (Object obj : lst) {
-                    if (obj instanceof JSONObject map) {
-                        for (String key : map.keySet()) {
-                            conditions = buildConditions(conditions, map, key, false);
-                        }
-                    }
-                }
+            final JSONObject map = jsonObj.getJSONObject("match");
+            for (String mapKey : map.keySet()) {
+                conditions = buildConditions(conditions, map, mapKey);
             }
-        } else {
+        }
+        if (null == conditions) {
             return null;
         }
 
-        final SimpleQuery query = new SimpleQuery(conditions);
+        final SimpleQuery query = new SimpleQuery(mustProject.and(conditions));
         final Pageable pageable = PageRequest.of(jsonObj.optInt("page", 0), jsonObj.optInt("size", 5));
         query.setPageRequest(pageable);
         return solrTemplate.queryForPage("pieces", query, Piece.class);
     }
 
-    private static Criteria buildConditions(Criteria conditions, JSONObject map, String key, boolean defaultOpIsAnd) {
-        if (key.startsWith("AND "))
-            conditions = conditions.and(key.substring(4));
-        else if (key.startsWith("OR "))
-            conditions = conditions.or(key.substring(3));
-        else conditions = defaultOpIsAnd ? conditions.and(key) : conditions.or(key);
+    private static Criteria buildConditions(Criteria conditions, final JSONObject map, final String key) {
+        String field = key;
+        boolean opIsAnd;
+        // clean prefix, it used for order only
+        if (field.matches("^\\d+ .*")) {
+            field = field.substring(field.indexOf(' ') + 1);
+        }
 
-        String val = map.getString(key);
+        if (field.equals("AND") || field.equals("OR")) {
+            final JSONObject subMap = map.getJSONObject(key);
+            Criteria subConditions = null;
+            for (String subMapKey : subMap.keySet()) {
+                subConditions = buildConditions(subConditions, subMap, subMapKey);
+            }
+            if (null != subConditions) {
+                if (null == conditions) {
+                    conditions = subConditions;
+                } else {
+                    conditions = field.equals("AND") ? conditions.and(subConditions) : conditions.or(subConditions);
+                }
+            }
+            return conditions;
+        } else if (field.startsWith("AND ")) {
+            field = field.substring(4);
+            opIsAnd = true;
+        } else if (field.startsWith("OR ")) {
+            field = field.substring(3);
+            opIsAnd = false;
+        } else {
+            field = field;
+            opIsAnd = true;
+        }
+        if (null == conditions) {
+            conditions = new Criteria(field);
+        } else {
+            conditions = opIsAnd ? conditions.and(field) : conditions.or(field);
+        }
+
+        final String val = map.getString(key);
         if (val.startsWith("is "))
-            conditions = conditions.is(val.substring(3));
+            conditions = conditions.is(valObjects(val.substring(3)));
+        else if (val.startsWith("in "))
+            conditions = conditions.in(valObjects(val.substring(3)));
         else if (val.startsWith("startsWith "))
-            conditions = conditions.startsWith(val.substring(11));
+            conditions = conditions.startsWith(val.substring(11).split("\\|"));
         else if (val.startsWith("endsWith "))
-            conditions = conditions.endsWith(val.substring(9));
+            conditions = conditions.endsWith(val.substring(9).split("\\|"));
         else if (val.startsWith("contains "))
-            conditions = conditions.contains(val.substring(9));
-        else conditions = conditions.is(val);
+            conditions = conditions.contains(val.substring(9).split("\\|"));
+        else if (val.equals("isNull"))
+            conditions = conditions.isNull();
+        else if (val.equals("isNotNull"))
+            conditions = conditions.isNotNull();
+        else conditions = conditions.is(valObjects(val));
         return conditions;
+    }
+
+    private static Object[] valObjects(String val) {
+        return val.split("\\|");
     }
 }
