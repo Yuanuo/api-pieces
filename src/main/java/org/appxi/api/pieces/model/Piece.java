@@ -42,8 +42,9 @@ public class Piece {
     @Column(name = "v", columnDefinition = "CLOB")
     private List<String> categories;
 
-    // <field name="mapentry[0].key">mapentry[0].value</field>
-    // <field name="mapentry[1].key">mapentry[1].value</field>
+    // <field name="'field_' + mapentry[0].key">mapentry[0].value</field>
+    // <field name="'field_' + mapentry[1].key">mapentry[1].value</field>
+    @Dynamic
     @Field("field_*")
     @Lob
     @ElementCollection
@@ -52,9 +53,8 @@ public class Piece {
     @CollectionTable(name = "fields", joinColumns = @JoinColumn(name = "fld_fk"))
     private Map<String, String> fields;
 
-    // <field name="'text_' + mapentry[0].key">mapentry[0].value</field>
-    // <field name="'text_' + mapentry[1].key">mapentry[1].value</field>
-    @Dynamic
+    // <field name="mapentry[0].key">mapentry[0].value</field>
+    // <field name="mapentry[1].key">mapentry[1].value</field>
     @Field("text_*")
     @Lob
     @ElementCollection
